@@ -1,0 +1,53 @@
+name: Codex dependency snapshot token probe
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_b_sha:
+        description: Current controlled repository B commit SHA
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  submit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Compare local and cross-repository snapshot submission
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TARGET_B_SHA: ${{ inputs.target_b_sha }}
+        run: |
+          set -euo pipefail
+          scanned="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
+          local_payload="$(jq -nc \
+            --arg sha "$GITHUB_SHA" \
+            --arg scanned "$scanned" \
+            '{version:0,sha:$sha,ref:"refs/heads/main",job:{id:"codex-workflow-token-local-001",correlator:"codex/dependency-workflow-token-local"},detector:{name:"codex-controlled-workflow-detector",version:"1.0.0",url:"https://github.com/michael1026/h1-codex-dependency-a-20261113"},scanned:$scanned,manifests:{"codex-workflow-local.json":{name:"codex-workflow-local.json",file:{source_location:"codex-workflow-local.json"},resolved:{"codex-workflow-token-a":{package_url:"pkg:npm/codex-workflow-token-a@1.0.0",relationship:"direct",scope:"runtime"}}}}}')"
+          local_status="$(curl -sS -o /tmp/local-response.json -w '%{http_code}' \
+            -X POST \
+            -H 'Accept: application/vnd.github+json' \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H 'X-GitHub-Api-Version: 2026-03-10' \
+            https://api.github.com/repos/michael1026/h1-codex-dependency-a-20261113/dependency-graph/snapshots \
+            -d "$local_payload")"
+
+          cross_payload="$(jq -nc \
+            --arg sha "$TARGET_B_SHA" \
+            --arg scanned "$scanned" \
+            '{version:0,sha:$sha,ref:"refs/heads/main",job:{id:"codex-workflow-token-cross-001",correlator:"codex/dependency-workflow-token-cross"},detector:{name:"codex-controlled-workflow-detector",version:"1.0.0",url:"https://github.com/michael1026/h1-codex-dependency-b-20261113"},scanned:$scanned,manifests:{"codex-workflow-cross.json":{name:"codex-workflow-cross.json",file:{source_location:"codex-workflow-cross.json"},resolved:{"codex-cross-token-b":{package_url:"pkg:npm/codex-cross-token-b@1.0.0",relationship:"direct",scope:"runtime"}}}}}')"
+          cross_status="$(curl -sS -o /tmp/cross-response.json -w '%{http_code}' \
+            -X POST \
+            -H 'Accept: application/vnd.github+json' \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H 'X-GitHub-Api-Version: 2026-03-10' \
+            https://api.github.com/repos/michael1026/h1-codex-dependency-b-20261113/dependency-graph/snapshots \
+            -d "$cross_payload")"
+
+          printf 'local_submission_status=%s\n' "$local_status"
+          printf 'local_submission_result=%s\n' "$(jq -r '.result // .message // "unknown"' /tmp/local-response.json)"
+          printf 'cross_submission_status=%s\n' "$cross_status"
+          printf 'cross_submission_result=%s\n' "$(jq -r '.result // .message // "unknown"' /tmp/cross-response.json)"
