@@ -1,0 +1,39 @@
+name: Codex controlled bot review
+
+on:
+  workflow_dispatch:
+    inputs:
+      pull_number:
+        description: Controlled pull request number
+        required: true
+        type: string
+      commit_id:
+        description: Expected controlled pull request head SHA
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Approve the exact controlled head
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PULL_NUMBER: ${{ inputs.pull_number }}
+          COMMIT_ID: ${{ inputs.commit_id }}
+        run: |
+          set -euo pipefail
+          payload="$(jq -nc --arg commit_id "$COMMIT_ID" '{body:"Controlled bot approval for lifecycle testing.",event:"APPROVE",commit_id:$commit_id}')"
+          status="$(curl -sS -o /tmp/review-response.json -w '%{http_code}' \
+            -X POST \
+            -H 'Accept: application/vnd.github+json' \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H 'X-GitHub-Api-Version: 2026-03-10' \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/pulls/${PULL_NUMBER}/reviews" \
+            -d "$payload")"
+          printf 'review_status=%s\n' "$status"
+          jq -c '{id,node_id,state,commit_id,user:.user.login,message}' /tmp/review-response.json
