@@ -1,0 +1,53 @@
+name: Codex Pages Controlled
+on:
+  workflow_dispatch:
+    inputs:
+      marker:
+        description: Controlled synthetic marker
+        required: true
+        type: string
+      include_cname:
+        description: Include reserved CNAME file
+        required: true
+        default: "false"
+        type: choice
+        options:
+          - "false"
+          - "true"
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Create controlled site
+        shell: bash
+        env:
+          CODEX_MARKER: ${{ inputs.marker }}
+          CODEX_INCLUDE_CNAME: ${{ inputs.include_cname }}
+        run: |
+          set -euo pipefail
+          mkdir -p site
+          printf '<!doctype html><title>Controlled Pages Test</title><p id="marker">%s</p>\n' "$CODEX_MARKER" > site/index.html
+          if [ "$CODEX_INCLUDE_CNAME" = "true" ]; then
+            printf 'codex-pages-test.invalid\n' > site/CNAME
+          fi
+      - name: Upload Pages artifact
+        id: upload
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: site
+  deploy:
+    needs: build
+    permissions:
+      actions: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy Pages artifact
+        id: deployment
+        uses: actions/deploy-pages@v4
