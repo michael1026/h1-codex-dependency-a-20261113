@@ -1,0 +1,40 @@
+name: Codex Pages Deployment Status Binding Probe
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+  pages: write
+jobs:
+  status-binding:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Query local route with foreign and random deployment ids
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          for pair in \
+            'foreign:bef788c897afd918ecf486bb7fb9765db7cf8cb1' \
+            'random:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' \
+            'local:01b3d215fbd1c218c430d97e70cd56f147cdd798'; do
+            label=${pair%%:*}
+            deployment_id=${pair#*:}
+            response=$(mktemp)
+            status=$(curl -sS -o "$response" -w '%{http_code}' \
+              -H 'Accept: application/vnd.github+json' \
+              -H 'X-GitHub-Api-Version: 2022-11-28' \
+              -H "Authorization: Bearer $GH_TOKEN" \
+              "https://api.github.com/repos/michael1026/h1-codex-dependency-a-20261113/pages/deployments/$deployment_id")
+            echo "${label}_http=$status"
+            echo "${label}_status=$(jq -r '.status // "missing"' "$response")"
+          done
+          response=$(mktemp)
+          status=$(curl -sS -o "$response" -w '%{http_code}' \
+            -H 'Accept: application/vnd.github+json' \
+            -H 'X-GitHub-Api-Version: 2022-11-28' \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            'https://api.github.com/repos/michael1026/h1-codex-dependency-b-20261113/pages/deployments/bef788c897afd918ecf486bb7fb9765db7cf8cb1')
+          echo "foreign_route_http=$status"
+          echo "foreign_route_status=$(jq -r '.status // "missing"' "$response")"
+          echo "foreign_route_message=$(jq -r '.message // "none"' "$response")"
